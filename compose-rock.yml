@@ -1,0 +1,41 @@
+version: "3"
+services:
+  server:
+    image: habitica-app-rock:chiseled
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      - NODE_DB_URI=mongodb://mongo/habitica # this only needs to be adapted if using a separate database
+      - BASE_URL=http://127.0.0.1:3000 # change this to the URL under which your instance will be reachable
+      - INVITE_ONLY=false # change to `true` after registration of initial users, to restrict further registrations
+      - EMAIL_SERVER_URL=mail.example.com
+      - EMAIL_SERVER_PORT=587
+      - EMAIL_SERVER_AUTH_USER=mail_user
+      - EMAIL_SERVER_AUTH_PASSWORD=mail_password
+    ports:
+      - "3000:3000"
+    networks:
+      - habitica
+  mongo:
+    image: docker.io/mongo:5.0
+    restart: unless-stopped
+    hostname: mongo
+    command: ["--replSet", "rs", "--bind_ip_all", "--port", "27017"]
+    healthcheck:
+      test: echo "try { rs.status() } catch (err) { rs.initiate() }" | mongosh --port 27017 --quiet
+      interval: 10s
+      timeout: 30s
+      start_period: 0s
+      start_interval: 1s
+      retries: 30
+    volumes:
+      - ./db:/data/db:rw
+      - ./dbconf:/data/configdb
+    networks:
+      habitica:
+        aliases:
+          - mongo
+networks:
+  habitica:
+    driver: bridge

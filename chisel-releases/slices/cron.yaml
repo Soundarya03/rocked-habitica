@@ -1,0 +1,31 @@
+package: cron
+
+essential:
+  - cron_copyright
+
+slices:
+
+  daemon:
+    essential:
+      - libc6_libs
+      - libpam0g_libs
+      - libselinux1_libs
+      - base-passwd_data
+    contents:
+      /usr/sbin/cron:
+
+  crontab:
+    essential:
+      - libc6_libs
+      - libpam0g_libs
+    contents:
+      /usr/bin/crontab:
+
+  config:
+    contents:
+      /etc/default/cron:
+      /etc/pam.d/cron:
+
+  copyright:
+    contents:
+      /usr/share/doc/cron/copyright:
