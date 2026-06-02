@@ -1,50 +1,4 @@
-# Rock-ed Habitica for self-hosting
-
-This project builds a [rock](https://documentation.ubuntu.com/rockcraft/stable/explanation/rocks/#explanation-rocks)—a new-age, minimal container image—of the Habitica app for self-hosting, using the open source tools [rockcraft](https://documentation.ubuntu.com/rockcraft/stable/) and [chisel](https://documentation.ubuntu.com/chisel/latest/).
-
-This builds upon [awinterstein/habitica](https://github.com/awinterstein/habitica), which consists of adaptations for self-hosting Habitica and is a fork of the upstream Habitica app itself.
-In place of building a regular Docker image, however, this builds a **chiseled rock, which minimizes the size (and by extension attack surface) of the container image by over 45%**.
-
-The license from the upstream projects applies here too.
-
-## How to use
-
-This is a step-by-step guide to build the habitica rock, i.e, the lightweight OCI-compliant container image,
-and compose it alongside other services it may need such as a mongo database, and have the app up and running on your local system.
-
-1. Install pre-requisites
-
-Refer [this](https://documentation.ubuntu.com/rockcraft/stable/tutorial/hello-world/#setup-your-environment) quick tutorial's "Setup your environment" section to install rockcraft and the tools you will need.
-You can follow along with the rest of the below steps on the Ubuntu VM set up in the tutorial.
-
-2. Build the rock
-
-Clone this repository, `cd` into the root of this project, and simply run
-
-```commandline
-rockcraft pack
-```
-
-This should provide you with an OCI archive (a `.rock` file). Congratulations! Your OCI-compliant container image is now available.
-
-3. Import the rock into Docker to run locally
-
-The great part about the rock being an [OCI-compliant](https://opencontainers.org/) container image is that it can be used alongside other OCI-compliant tools.
-To run our container locally, let's execute the following command to import our new rock into Docker:
-```commandline
-sudo rockcraft.skopeo --insecure-policy copy oci-archive:habitica-app_2.0_amd64.rock docker-daemon:habitica-app-rock:chiseled
-```
-Change the names as required.
-
-4. Use Docker compose to orchestrate your services
-You can find a `compose-rock.yaml` file in this project. Run the following command to bring up your full-stack app:
-```commandline
-docker compose -f compose-rock.yaml up
-```
-You've now got a full-working Habitica instance accessible at localhost:3000!
-You can customize this docker compose file as needed.
-
-## Readme of awinterstein/habitica
+# Habitica Self-Hosted
 
 Adaptions and infrastructure to facilitate self-hosting of the habit-building program [Habitica](https://habitica.com). It is based on the source code and assets of the [Habitica Repository](https://github.com/HabitRPG/habitica), hence the [LICENSE](https://github.com/HabitRPG/habitica/blob/develop/LICENSE) from there applies here and to the adaptions in this repository as well.
 
@@ -52,7 +6,7 @@ Adaptions and infrastructure to facilitate self-hosting of the habit-building pr
 
 For each release in the Habitica upstream repository, the self-hosting adaptions are automatically applied by rebasing the `self-host` branch onto the last release commit. The Docker images for server and client are built then and pushed to Docker Hub as [awinterstein/habitica-server](https://hub.docker.com/r/awinterstein/habitica-server) and [awinterstein/habitica-client](https://hub.docker.com/r/awinterstein/habitica-client).
 
-### Improvements for Self-Hosting
+## Improvements for Self-Hosting
 
 The following noteworthy changes were applied to the Habitica source code:
 
@@ -66,12 +20,103 @@ The following noteworthy changes were applied to the Habitica source code:
 - registrations can be restricted to only invited users via a configuration parameter
 - analytics and payment scripts are not loaded
 
-### Limitations
+## Limitations
 
 The following things do not work (yet):
 - third-party access and scripts are not thoroughly disabled, so there might still be some scripts loaded
 
-_(This is a shortened version. For the full Readme of the upstream awinterstein/habtica, please check [here](https://github.com/awinterstein/habitica).)_
+Contributions to fix those or other things are very welcome!
+
+## Simple Setup with Docker Compose
+
+Habitica needs a Mongo database, its server component (a NodeJS application) and its client component (a Vue.js application). In the simplest setup for self-hosting, there are two containers started for them, with a dependency from the server (that provides the server and the client component) to the database:
+
+```mermaid
+architecture-beta
+    group containers(server)[Containers]
+
+    service db(database)[MongoDB] in containers
+    service server(server)[Server] in containers
+
+    db:L <-- R:server
+
+    group host(server)[Host]
+    service proxy(server)[Reverse Proxy] in host
+
+    proxy{group}:T --> B:server{group}
+```
+
+The server port could directly be exposed as port 80 on the host. However, usually a reverse proxy like Nginx would be put in front, that handles HTTPS traffic including TLS certificate handling.
+
+The following Docker Compose file can be used for setting up the containers:
+
+```yaml
+version: "3"
+services:
+  server:
+    image: docker.io/awinterstein/habitica-server:latest
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      - NODE_DB_URI=mongodb://mongo/habitica # this only needs to be adapted if using a separate database
+      - BASE_URL=http://127.0.0.1:3000 # change this to the URL under which your instance will be reachable
+      - INVITE_ONLY=false # change to `true` after registration of initial users, to restrict further registrations
+      - EMAIL_SERVER_URL=mail.example.com
+      - EMAIL_SERVER_PORT=587
+      - EMAIL_SERVER_AUTH_USER=mail_user
+      - EMAIL_SERVER_AUTH_PASSWORD=mail_password
+      - ADMIN_EMAIL=mail@example.com # the sender address to send out emails
+    ports:
+      - "3000:3000"
+    networks:
+      - habitica
+  mongo:
+    image: docker.io/mongo:latest # better to replace 'latest' with the concrete mongo version (e.g., the most recent one)
+    restart: unless-stopped
+    hostname: mongo
+    command: ["--replSet", "rs", "--bind_ip_all", "--port", "27017"]
+    healthcheck:
+      test: echo "try { rs.status() } catch (err) { rs.initiate() }" | mongosh --port 27017 --quiet
+      interval: 10s
+      timeout: 30s
+      start_period: 0s
+      start_interval: 1s
+      retries: 30
+    volumes:
+      - ./db:/data/db:rw
+      - ./dbconf:/data/configdb
+    networks:
+      habitica:
+        aliases:
+          - mongo
+networks:
+  habitica:
+    driver: bridge
+```
+
+> [!IMPORTANT]
+> If you are planning to run the Habitica containers on a Raspberry Pi 4, you might not be able to use `mongo:latest` (see [issue 20](https://github.com/awinterstein/habitica/issues/20)). In this case you can try to use `mongo:bionic` instead.
+
+## Optimized Setup with Docker Compose
+
+As there's probably a web server running on the host already, acting as a reverse proxy for Habitica, this web server could be used to sever the static client files for Habitica as well.
+
+```mermaid
+architecture-beta
+    group containers(server)[Containers]
+    service db(database)[MongoDB] in containers
+    service server(server)[Server] in containers
+    db:L <-- R:server
+
+    group host(server)[Host]
+    service proxy(server)[Reverse Proxy] in host
+    proxy{group}:T --> B:server{group}
+    service client(database)[Client Files] in host
+    proxy:R --> L:client
+```
+
+Or the static client files could be served from a different host (e.g., a static file hosting).
 
 ## Readme of the Upstream Habitica Repository
 

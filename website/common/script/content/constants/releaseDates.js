@@ -32,6 +32,9 @@ export const ARMOIRE_RELEASE_DATES = {
   yellowLoungewear: { year: 2026, month: 3 },
   handstand: { year: 2026, month: 4 },
   verdantPage: { year: 2026, month: 5 },
+  rainbowKite: { year: 2026, month: 6 },
+  kendo: { year: 2026, month: 7 },
+  gardener2: { year: 2026, month: 8 },
 };
 
 export const EGGS_RELEASE_DATES = {
@@ -53,4 +56,5 @@ export const HATCHING_POTIONS_RELEASE_DATES = {
   Cryptid: { year: 2025, month: 4, day: 3 },
   Balloon: { year: 2025, month: 4, day: 21 },
   Opal: { year: 2025, month: 5, day: 14 },
+  Alien: { year: 2026, month: 4, day: 3 },
 };

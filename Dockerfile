@@ -108,6 +108,10 @@ RUN echo -e ":80 {\n\
 	}\n\
 \n\
 	root * /var/www\n\
-	reverse_proxy @backend {\$BACKEND_SERVER:server:3000}\n\
+    reverse_proxy @backend {\$BACKEND_SERVER:server:3000} {\n\
+        header_up Host {host}\n\
+        header_up X-Forwarded-Host {host}\n\
+        header_up X-Forwarded-Proto {header.X-Forwarded-Proto}\n\
+    }\n\
 	file_server\n\
 }" > /etc/caddy/Caddyfile

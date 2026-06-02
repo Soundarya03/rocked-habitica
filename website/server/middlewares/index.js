@@ -68,7 +68,26 @@ export default function attachMiddlewares (app, server) {
   // See https://helmetjs.github.io/ for the list of headers enabled by default
   app.use(helmet({
     // New middlewares added by default in Helmet 4 are disabled
-    contentSecurityPolicy: false, // @TODO implement
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: [
+          "'self'",
+          'fonts.googleapis.com',
+          'fonts.gstatic.com',
+        ],
+        imgSrc: [
+          '*',
+          'data:',
+        ],
+        scriptSrc: [
+          "'self'",
+          "'sha256-O98YO4sTzZusE0Qwk1QHBd8rb+KQco08uUBdCb+ipdE='", /* inline script in content.js */
+          "'sha256-ZswfTY7H35rbv8WC7NXBoiC7WNu86vSzCDChNWwZZDM='", /* inline script in utils.js */
+          "'unsafe-eval'", /* currently needed for the task modal */
+        ],
+        upgradeInsecureRequests: IS_PROD ? [] : null,
+      },
+    },
     expectCt: false,
     permittedCrossDomainPolicies: false,
     referrerPolicy: false,

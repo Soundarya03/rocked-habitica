@@ -158,7 +158,7 @@ schema.plugin(baseModel, {
     if (plainObj.purchased) {
       plainObj.purchased.active = originalDoc.hasActiveGroupPlan();
       const plan = originalDoc.purchased && originalDoc.purchased.plan;
-      if (plan && plan.customerId) {
+      if (plan && plan.dateCreated) {
         plainObj.purchased.wasUpgraded = true;
         if (plan.dateTerminated) {
           plainObj.purchased.dateTerminated = plan.dateTerminated;
@@ -260,11 +260,11 @@ schema.statics.getGroup = async function getGroup (options = {}) {
   } else if (isTavern) {
     query = { _id: TAVERN_ID };
   } else if (optionalMembership === true) {
-    query = { _id: groupId };
+    query = { privacy: 'private', _id: groupId };
   } else if (isUserGuild) {
-    query = { type: 'guild', _id: groupId };
+    query = { type: 'guild', privacy: 'private', _id: groupId };
   } else {
-    query = { type: 'guild', privacy: 'public', _id: groupId };
+    return null;
   }
 
   const mQuery = this.findOne(query);
@@ -316,7 +316,7 @@ schema.statics.getGroups = async function getGroups (options = {}) {
           type: 'guild',
           privacy: 'private',
           _id: { $in: user.guilds },
-          'purchased.plan.customerId': { $exists: true },
+          'purchased.plan.dateCreated': { $exists: true },
         };
         if (!filters.includeExpiredPlans) {
           query.$or = [
@@ -496,6 +496,17 @@ schema.statics.validateInvitations = async function getInvitationErr (invites, r
   }
 };
 
+schema.methods.getEffectiveChatLimit = function getEffectiveChatLimit (limit) {
+  let maxChatCount = MAX_CHAT_COUNT;
+  if (this.chatLimitCount && this.chatLimitCount >= MAX_CHAT_COUNT) {
+    maxChatCount = this.chatLimitCount;
+  } else if (this.hasActiveGroupPlan()) {
+    maxChatCount = MAX_SUBBED_GROUP_CHAT_COUNT;
+  }
+
+  return limit !== undefined ? Math.min(limit, maxChatCount) : maxChatCount;
+};
+
 schema.methods.getParticipatingQuestMembers = function getParticipatingQuestMembers () {
   return Object.keys(this.quest.members).filter(member => this.quest.members[member]);
 };
@@ -653,7 +664,20 @@ schema.methods.sendChat = async function sendChat (options = {}) {
   return newChatMessage;
 };
 
-schema.methods.handleQuestInvitation = async function handleQuestInvitation (user, accept) {
+schema.methods.trimChat = async function trimChat (limit) {
+  const query = Chat.find({ groupId: this._id })
+    .sort('-timestamp')
+    .skip(limit || (this.getEffectiveChatLimit() * 2))
+    .limit(1);
+  const lastMessage = await query.exec();
+  if (lastMessage && lastMessage.length > 0) {
+    const lastMessageTimestamp = lastMessage[0].timestamp;
+    await Chat.deleteMany({ groupId: this._id, timestamp: { $lte: lastMessageTimestamp } }).exec();
+  }
+};
+
+// eslint-disable-next-line max-len
+schema.methods.handleQuestInvitation = async function handleQuestInvitation (user, accept, session) {
   if (!user) throw new InternalServerError('Must provide user to handle quest invitation');
   if (accept !== true && accept !== false) throw new InternalServerError('Must provide accept param handle quest invitation');
 
@@ -661,12 +685,14 @@ schema.methods.handleQuestInvitation = async function handleQuestInvitation (use
   // to prevent multiple concurrent requests overriding updates
   // see https://github.com/HabitRPG/habitica/issues/11398
   const Group = this.constructor;
+  const options = session ? { session } : {};
   const result = await Group.updateOne(
     {
       _id: this._id,
       [`quest.members.${user._id}`]: { $type: 10 }, // match BSON Type Null (type number 10)
     },
     { $set: { [`quest.members.${user._id}`]: accept } },
+    options,
   ).exec();
 
   if (result.modifiedCount) {
