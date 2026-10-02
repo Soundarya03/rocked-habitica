@@ -17,7 +17,14 @@ COPY ["website/client/package.json", "website/client/package-lock.json", "./webs
 RUN cd website/client/ && npm pkg set scripts.postinstall="echo \"Skipping postinstall\"" && npm install
 
 # Make the source code available in the container
-COPY . /usr/src/habitica
+COPY --exclude=.git --exclude=Dockerfile . /usr/src/habitica
+
+# Copy assets into the public directory for being included in the release
+RUN mkdir -p /usr/src/habitica/website/client/public/mobileApp/images/
+RUN find /usr/src/habitica/habitica-images \( -iname "*.gif" -o -iname "*.png" \) -exec cp -t /usr/src/habitica/website/client/public/mobileApp/images/ {} \;
+
+# Replace media URLs to AWS with relative paths
+RUN grep "https://habitica-assets.s3.amazonaws.com/" /usr/src/habitica/ -lr | xargs sed -i 's#https://habitica-assets.s3.amazonaws.com/#/#g'
 
 # Create configuration file (some values are needed for the client build already)
 RUN echo '{\n\
@@ -108,10 +115,6 @@ RUN echo -e ":80 {\n\
 	}\n\
 \n\
 	root * /var/www\n\
-    reverse_proxy @backend {\$BACKEND_SERVER:server:3000} {\n\
-        header_up Host {host}\n\
-        header_up X-Forwarded-Host {host}\n\
-        header_up X-Forwarded-Proto {header.X-Forwarded-Proto}\n\
-    }\n\
+	reverse_proxy @backend {\$BACKEND_SERVER:server:3000}\n\
 	file_server\n\
 }" > /etc/caddy/Caddyfile

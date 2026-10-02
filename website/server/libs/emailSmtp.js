@@ -529,6 +529,11 @@ let htmlTemplate = (variables, button_text, button_link, text_before) => `<!doct
 
 
 export default function sendEmail(emailType, variables, personalVariables) {
+	if (!nconf.get('EMAIL_SERVER_URL')) {
+		logger.info('Will not send email, because there is no mail server configured.');
+		return;
+	}
+
 	let variablesMap = {};
 	variables.forEach(variable => variablesMap[variable.name] = variable.content);
 

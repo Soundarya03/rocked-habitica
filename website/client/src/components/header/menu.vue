@@ -359,6 +359,7 @@
                 v-if="hasPermission(user, 'news')"
                 class="topbar-dropdown-item dropdown-item"
                 target="_blank"
+                rel="noopener noreferrer"
                 href="https://panel.habitica.com"
               >
                 {{ $t('newsroom') }}
@@ -399,7 +400,7 @@
               :aria-label="$t('gold')"
               v-html="icons.gold"
             ></div>
-            <span>{{ Math.floor(user.stats.gp * 100) / 100 }}</span>
+            <span>{{ Math.floor(user.stats.gp) }}</span>
           </div>
         </div>
         <div class="form-inline desktop-only">

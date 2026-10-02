@@ -6,6 +6,7 @@ import { compression } from 'vite-plugin-compression2';
 import vue from '@vitejs/plugin-vue2'
 import { fileURLToPath } from 'node:url'
 import setupNconf from '../server/libs/setupNconf';
+import webfontDownload from 'vite-plugin-webfont-dl';
 
 const configFile = path.join(path.resolve(__dirname, '../../config.json'));
 setupNconf(configFile, nconf);
@@ -18,18 +19,13 @@ if (S3_URL && !S3_URL.endsWith('/')) {
 
 const ENABLE_S3 = S3_URL && nconf.get('S3_ACCESS_KEY') && nconf.get('S3_SECRET_KEY');
 
-
 const envVars = [
-  'AMAZON_PAYMENTS_SELLER_ID',
-  'AMAZON_PAYMENTS_CLIENT_ID',
-  'AMAZON_PAYMENTS_MODE',
   'EMAILS_COMMUNITY_MANAGER_EMAIL',
   'EMAILS_TECH_ASSISTANCE_EMAIL',
   'EMAILS_PRESS_ENQUIRY_EMAIL',
   'STRIPE_PUB_KEY',
   'GOOGLE_CLIENT_ID',
   'APPLE_AUTH_CLIENT_ID',
-  'AMPLITUDE_KEY',
   'LOGGLY_CLIENT_TOKEN',
   'TRUSTED_DOMAINS',
   'TIME_TRAVEL_ENABLED',
@@ -62,6 +58,7 @@ export default defineConfig({
     dedupe: ['moment', 'lodash', 'moment-recur'],
   },
   plugins: [
+    webfontDownload(),
     vue(),
     compression({
       filename: 'compressed/[base]',
@@ -140,10 +137,6 @@ export default defineConfig({
         changeOrigin: true,
       },
       '^/stripe': {
-        target: DEV_BASE_URL,
-        changeOrigin: true,
-      },
-      '^/amazon': {
         target: DEV_BASE_URL,
         changeOrigin: true,
       },

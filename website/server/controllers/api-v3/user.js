@@ -9,10 +9,6 @@ import {
   BadRequest,
   NotAuthorized,
 } from '../../libs/errors';
-import {
-  basicFields as basicGroupFields,
-  model as Group,
-} from '../../models/group';
 import * as Tasks from '../../models/task';
 import * as passwordUtils from '../../libs/password';
 import {
@@ -22,6 +18,7 @@ import {
   getUserInfo,
   sendTxn,
 } from '../../libs/email';
+import worker from '../../libs/worker';
 import * as inboxLib from '../../libs/inbox';
 import * as userLib from '../../libs/user';
 import { model as UserHistory } from '../../models/userHistory';
@@ -170,21 +167,10 @@ api.getBuyList = {
  */
 api.getInAppRewardsList = {
   method: 'GET',
-  middlewares: [authWithHeaders({ userFieldsToInclude: ['items', 'pinnedItems', 'unpinnedItems', 'pinnedItemsOrder', 'stats.class', 'achievements', 'purchased'] })],
+  middlewares: [authWithHeaders({ leanUser: true, userFieldsToInclude: ['items', 'pinnedItems', 'unpinnedItems', 'pinnedItemsOrder', 'stats.class', 'achievements', 'purchased'] })],
   url: '/user/in-app-rewards',
   async handler (req, res) {
-    const list = common.inAppRewards(res.locals.user);
-
-    // return text and notes strings
-    forEach(list, item => {
-      forEach(item, (itemPropVal, itemPropKey) => {
-        if (
-          isFunction(itemPropVal)
-          && itemPropVal.i18nLangFunc
-        ) item[itemPropKey] = itemPropVal(req.language);
-      });
-    });
-
+    const list = common.inAppRewards(res.locals.user, req.language);
     res.respond(200, list);
   },
 };
@@ -297,21 +283,6 @@ api.deleteUser = {
       throw new NotAuthorized(res.t('cannotDeleteActiveAccount'));
     }
 
-    const types = ['party', 'guilds'];
-    const groupFields = basicGroupFields.concat(' leader memberCount purchased');
-
-    const groupsUserIsMemberOf = await Group.getGroups({ user, types, groupFields });
-
-    const groupLeavePromises = groupsUserIsMemberOf.map(group => group.leave(user, 'remove-all'));
-
-    await Promise.all(groupLeavePromises);
-
-    await Tasks.Task.deleteMany({
-      userId: user._id,
-    }).exec();
-
-    await user.deleteOne();
-
     if (feedback) {
       sendTxn({ email: TECH_ASSISTANCE_EMAIL }, 'admin-feedback', [
         { name: 'PROFILE_NAME', content: user.profile.name },
@@ -322,6 +293,15 @@ api.deleteUser = {
         { name: 'FEEDBACK', content: feedback },
       ]);
     }
+
+    worker.sendJob('deleteUser', {
+      identifier: user._id,
+      data: {
+        userId: user._id,
+        deleteAccount: true,
+        deleteAmplitude: true,
+      },
+    });
 
     res.respond(200, {});
   },
@@ -397,7 +377,7 @@ api.getUserAnonymized = {
         { type: { $in: ['habit', 'daily', 'reward'] } },
       ],
     };
-    const tasks = await Tasks.Task.find(query).exec();
+    const tasks = await Tasks.Task.find(query).lean().exec();
 
     forEach(tasks, task => {
       task.text = 'task text';
